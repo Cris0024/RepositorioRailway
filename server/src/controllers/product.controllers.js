@@ -228,16 +228,78 @@ export const createProducts = async (req, res) => {
 };
 
 // Actualizar un producto y su inventario
+// export const updateProducts = async (req, res) => {
+//   const { id } = req.params;
+//   const { Nombre, Descripcion, Precio, CategoriaID, ProveedorID, Especificaciones, CantidadComprada, CantidadVendida } = req.body;
+//   try {
+//     const [result] = await pool.query('UPDATE Productos SET Nombre = ?, Descripcion = ?, Precio = ?, CategoriaID = ?, ProveedorID = ? WHERE ProductoID = ?', 
+//       [Nombre, Descripcion, Precio, CategoriaID, ProveedorID, id]);
+
+//     if (result.affectedRows === 0) return res.status(404).json({ message: 'Producto no encontrado' });
+
+//     // Actualizar las especificaciones
+//     if (Especificaciones && Especificaciones.length > 0) {
+//       await pool.query('DELETE FROM Especificaciones WHERE ProductoID = ?', [id]);
+//       for (let spec of Especificaciones) {
+//         await pool.query('INSERT INTO Especificaciones (ProductoID, NombreEspecificacion, ValorEspecificacion) VALUES (?, ?, ?)', 
+//           [id, spec.NombreEspecificacion, spec.ValorEspecificacion]);
+//       }
+//     }
+
+//     // Actualizar el inventario
+
+//     res.json({ message: 'Producto y especificaciones actualizadas' });
+//   } catch (error) {
+//     res.status(500).json({ error: error.message });
+//   }
+// };
 export const updateProducts = async (req, res) => {
   const { id } = req.params;
-  const { Nombre, Descripcion, Precio, CategoriaID, ProveedorID, Especificaciones, CantidadComprada, CantidadVendida } = req.body;
+  const { Nombre, Descripcion, Precio, CategoriaID, ProveedorID, Especificaciones } = req.body;
+  
   try {
-    const [result] = await pool.query('UPDATE Productos SET Nombre = ?, Descripcion = ?, Precio = ?, CategoriaID = ?, ProveedorID = ? WHERE ProductoID = ?', 
-      [Nombre, Descripcion, Precio, CategoriaID, ProveedorID, id]);
+    // Primero, obtener los datos actuales del producto para compararlos
+    const [currentProduct] = await pool.query('SELECT * FROM Productos WHERE ProductoID = ?', [id]);
+    if (currentProduct.length === 0) return res.status(404).json({ message: 'Producto no encontrado' });
+    
+    const existingProduct = currentProduct[0];
+    
+    // Generar el query dinámico solo con los campos modificados
+    const fieldsToUpdate = [];
+    const valuesToUpdate = [];
 
-    if (result.affectedRows === 0) return res.status(404).json({ message: 'Producto no encontrado' });
+    if (Nombre && Nombre !== existingProduct.Nombre) {
+      fieldsToUpdate.push('Nombre = ?');
+      valuesToUpdate.push(Nombre);
+    }
 
-    // Actualizar las especificaciones
+    if (Descripcion && Descripcion !== existingProduct.Descripcion) {
+      fieldsToUpdate.push('Descripcion = ?');
+      valuesToUpdate.push(Descripcion);
+    }
+
+    if (Precio && Precio !== existingProduct.Precio) {
+      fieldsToUpdate.push('Precio = ?');
+      valuesToUpdate.push(Precio);
+    }
+
+    if (CategoriaID && CategoriaID !== existingProduct.CategoriaID) {
+      fieldsToUpdate.push('CategoriaID = ?');
+      valuesToUpdate.push(CategoriaID);
+    }
+
+    if (ProveedorID && ProveedorID !== existingProduct.ProveedorID) {
+      fieldsToUpdate.push('ProveedorID = ?');
+      valuesToUpdate.push(ProveedorID);
+    }
+
+    if (fieldsToUpdate.length > 0) {
+      const updateQuery = `UPDATE Productos SET ${fieldsToUpdate.join(', ')} WHERE ProductoID = ?`;
+      valuesToUpdate.push(id);
+      await pool.query(updateQuery, valuesToUpdate);
+    }
+
+    // Actualizar las especificaciones si han cambiado
     if (Especificaciones && Especificaciones.length > 0) {
       await pool.query('DELETE FROM Especificaciones WHERE ProductoID = ?', [id]);
       for (let spec of Especificaciones) {
@@ -246,13 +308,12 @@ export const updateProducts = async (req, res) => {
       }
     }
 
-    // Actualizar el inventario
-
-    res.json({ message: 'Producto y especificaciones actualizadas' });
+    res.json({ message: 'Producto actualizado correctamente' });
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
 };
+
 
 // Eliminar un producto, sus especificaciones y su inventario
 export const deleteProducts = async (req, res) => {
