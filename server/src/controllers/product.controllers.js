@@ -1,55 +1,274 @@
-import { pool } from '../db.js'; // Asegúrate de importar tu pool de conexiones
+// Importa tu pool de conexiones
+import { pool } from '../db.js';
 
+// Obtener todos los productos con sus especificaciones e inventario
 export const getProducts = async (req, res) => {
   try {
-    const [products] = await pool.query('SELECT * FROM Productos');
+    const [products] = await pool.query(`
+      SELECT p.ProductoID, p.Nombre AS Nombre, p.Precio, p.Imagen,
+             c.Nombre AS NombreCategoria, pr.Nombre AS NombreProveedor
+      FROM Productos p
+      LEFT JOIN Categorias c ON p.CategoriaID = c.CategoriaID
+      LEFT JOIN Proveedores pr ON p.ProveedorID = pr.ProveedorID
+    `);
+    
+    for (let product of products) {
+      // Obtener especificaciones
+      const [specs] = await pool.query('SELECT NombreEspecificacion, ValorEspecificacion FROM Especificaciones WHERE ProductoID = ?', [product.ProductoID]);
+      product.Especificaciones = specs;
+
+      // Obtener inventario
+      const [inventory] = await pool.query('SELECT CantidadComprada, CantidadVendida, CantidadDisponible, FechaUltimaActualizacion FROM Inventario WHERE ProductoID = ?', [product.ProductoID]);
+      product.Inventario = inventory.length > 0 ? inventory[0] : null;
+    }
+
     res.json(products);
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
 };
 
-export const getProduct = async (req, res) => {
-  const { id } = req.params;
+// export const getProductsActive = async (req, res) => {
+//   try {
+//     const [products] = await pool.query(`
+//      SELECT 
+//         p.ProductoID, 
+//         p.Nombre AS Nombre, 
+//         p.Descripcion, 
+//         p.Precio, 
+//         p.Imagen,
+//         c.Nombre AS NombreCategoria, 
+//         pr.Nombre AS NombreProveedor,
+//         i.CantidadComprada,
+//         i.CantidadVendida,
+//         i.CantidadDisponible,
+//         i.FechaUltimaActualizacion
+//       FROM 
+//         Productos p
+//       LEFT JOIN 
+//         Categorias c ON p.CategoriaID = c.CategoriaID
+//       LEFT JOIN 
+//         Proveedores pr ON p.ProveedorID = pr.ProveedorID
+//       LEFT JOIN 
+//         Inventario i ON p.ProductoID = i.ProductoID
+//       WHERE 
+//         p.estadoEliminacion = 1
+//     `);
+    
+//     for (let product of products) {
+//       // Obtener especificaciones
+//       const [specs] = await pool.query('SELECT NombreEspecificacion, ValorEspecificacion FROM Especificaciones WHERE ProductoID = ?', [product.ProductoID]);
+//       product.Especificaciones = specs;
+
+//       // Obtener inventario
+//       const [inventory] = await pool.query('SELECT CantidadComprada, CantidadVendida, CantidadDisponible, FechaUltimaActualizacion FROM Inventario WHERE ProductoID = ?', [product.ProductoID]);
+//       product.Inventario = inventory.length > 0 ? inventory[0] : null;
+//     }
+
+//     res.json(products);
+//   } catch (error) {
+//     res.status(500).json({ error: error.message });
+//   }
+// };
+
+
+// Controlador para obtener los detalles completos de un producto
+
+export const getProductsActive = async (req, res) => {
   try {
-    const [product] = await pool.query('SELECT * FROM Productos WHERE ProductoID = ?', [id]);
-    if (product.length === 0) return res.status(404).json({ message: 'Producto no encontrado' });
-    res.json(product[0]);
+    const [products] = await pool.query(`
+      SELECT 
+        p.ProductoID, 
+        p.Nombre, 
+        p.Descripcion, 
+        p.Precio, 
+        p.Imagen,
+        p.CategoriaID,
+        p.ProveedorID
+      FROM 
+        Productos p
+      WHERE 
+        p.estadoEliminacion = 1
+    `);
+    
+    for (let product of products) {
+      // Obtener especificaciones
+      const [specs] = await pool.query('SELECT NombreEspecificacion, ValorEspecificacion FROM Especificaciones WHERE ProductoID = ?', [product.ProductoID]);
+      product.Especificaciones = specs;
+
+      // Obtener categoría
+      const [category] = await pool.query('SELECT Nombre, Imagen FROM Categorias WHERE CategoriaID = ?', [product.CategoriaID]);
+      product.Categoria = category[0] || null; // Asegúrate de manejar el caso en que no exista
+
+      // Obtener proveedor
+      const [supplier] = await pool.query('SELECT Nombre, Contacto, Teléfono, Dirección FROM Proveedores WHERE ProveedorID = ?', [product.ProveedorID]);
+      product.Proveedor = supplier[0] || null; // Asegúrate de manejar el caso en que no exista
+    }
+
+    res.json(products);
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
 };
 
+
+
+export const getProduct = async (req, res) => { 
+  const { id } = req.params;
+  
+  try {
+    // Consulta principal para obtener el producto, la categoría, el proveedor y el inventario
+    const [productResult] = await pool.query(`
+      SELECT 
+        p.ProductoID, 
+        p.Nombre AS Nombre, 
+        p.Descripcion, 
+        p.Precio, 
+        p.Imagen,
+        c.Nombre AS NombreCategoria, 
+        pr.Nombre AS NombreProveedor,
+        i.CantidadComprada,
+        i.CantidadVendida,
+        i.CantidadDisponible,
+        i.FechaUltimaActualizacion
+      FROM 
+        Productos p
+      LEFT JOIN 
+        Categorias c ON p.CategoriaID = c.CategoriaID
+      LEFT JOIN 
+        Proveedores pr ON p.ProveedorID = pr.ProveedorID
+      LEFT JOIN 
+        Inventario i ON p.ProductoID = i.ProductoID
+      WHERE 
+        p.ProductoID = ? AND p.estadoEliminacion = 1
+    `, [id]);
+    
+    // Verificar si el producto existe
+    if (productResult.length === 0) {
+      return res.status(404).json({ message: 'Producto no encontrado' });
+    }
+    
+    const product = productResult[0];
+
+    // Obtener las especificaciones del producto
+    const [specs] = await pool.query(`
+      SELECT NombreEspecificacion, ValorEspecificacion 
+      FROM Especificaciones 
+      WHERE ProductoID = ?
+    `, [id]);
+    
+    product.Especificaciones = specs;
+
+    // Enviar la respuesta con los datos del producto
+    res.json(product);
+
+  } catch (error) {
+    // Manejar errores inesperados
+    res.status(500).json({ error: error.message });
+  }
+};
+
+
+// Obtener productos por categoría con especificaciones e inventario
+export const getProductCategory = async (req, res) => {
+  const { id } = req.params;
+  try {
+    const [products] = await pool.query(`
+      SELECT p.ProductoID, p.Nombre AS NombreProducto, p.Descripcion, p.Precio, 
+             p.Imagen, c.Nombre AS NombreCategoria, pr.Nombre AS NombreProveedor
+      FROM Productos p
+      JOIN Categorias c ON p.CategoriaID = c.CategoriaID
+      JOIN Proveedores pr ON p.ProveedorID = pr.ProveedorID
+      WHERE p.CategoriaID = ?`, [id]);
+      
+    if (products.length === 0) return res.status(404).json({ message: 'No se encontraron productos para esta categoría' });
+
+    for (let product of products) {
+      // Obtener especificaciones
+      const [specs] = await pool.query('SELECT NombreEspecificacion, ValorEspecificacion FROM Especificaciones WHERE ProductoID = ?', [product.ProductoID]);
+      product.Especificaciones = specs;
+
+      // Obtener inventario
+      const [inventory] = await pool.query('SELECT CantidadComprada, CantidadVendida, CantidadDisponible, FechaUltimaActualizacion FROM Inventario WHERE ProductoID = ?', [product.ProductoID]);
+      product.Inventario = inventory.length > 0 ? inventory[0] : null;
+    }
+
+    const categoryName = products[0].NombreCategoria;
+
+    res.json({ categoryName, products });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+};
+
+// Crear un producto con especificaciones e inventario
 export const createProducts = async (req, res) => {
-  const { Nombre, Descripcion, Precio, CategoriaID, ProveedorID } = req.body;
+  const { Nombre, Descripcion, Precio, CategoriaID, ProveedorID, Especificaciones, CantidadComprada } = req.body;
   try {
     const [result] = await pool.query('INSERT INTO Productos (Nombre, Descripcion, Precio, CategoriaID, ProveedorID) VALUES (?, ?, ?, ?, ?)', 
       [Nombre, Descripcion, Precio, CategoriaID, ProveedorID]);
-    res.status(201).json({ id: result.insertId, Nombre, Descripcion, Precio, CategoriaID, ProveedorID });
+
+    const productoID = result.insertId;
+
+    // Inserta las especificaciones del producto
+    if (Especificaciones && Especificaciones.length > 0) {
+      for (let spec of Especificaciones) {
+        await pool.query('INSERT INTO Especificaciones (ProductoID, NombreEspecificacion, ValorEspecificacion) VALUES (?, ?, ?)', 
+          [productoID, spec.NombreEspecificacion, spec.ValorEspecificacion]);
+      }
+    }
+
+    // Inserta el inventario inicial
+    await pool.query('INSERT INTO Inventario (ProductoID, CantidadComprada) VALUES (?, ?)', [productoID, CantidadComprada]);
+
+    res.status(201).json({ id: productoID, Nombre, Descripcion, Precio, CategoriaID, ProveedorID, Especificaciones, CantidadComprada });
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
 };
 
+// Actualizar un producto y su inventario
 export const updateProducts = async (req, res) => {
   const { id } = req.params;
-  const { Nombre, Descripcion, Precio, CategoriaID, ProveedorID } = req.body;
+  const { Nombre, Descripcion, Precio, CategoriaID, ProveedorID, Especificaciones, CantidadComprada, CantidadVendida } = req.body;
   try {
     const [result] = await pool.query('UPDATE Productos SET Nombre = ?, Descripcion = ?, Precio = ?, CategoriaID = ?, ProveedorID = ? WHERE ProductoID = ?', 
       [Nombre, Descripcion, Precio, CategoriaID, ProveedorID, id]);
+
     if (result.affectedRows === 0) return res.status(404).json({ message: 'Producto no encontrado' });
-    res.json({ message: 'Producto actualizado' });
+
+    // Actualizar las especificaciones
+    if (Especificaciones && Especificaciones.length > 0) {
+      await pool.query('DELETE FROM Especificaciones WHERE ProductoID = ?', [id]);
+      for (let spec of Especificaciones) {
+        await pool.query('INSERT INTO Especificaciones (ProductoID, NombreEspecificacion, ValorEspecificacion) VALUES (?, ?, ?)', 
+          [id, spec.NombreEspecificacion, spec.ValorEspecificacion]);
+      }
+    }
+
+    // Actualizar el inventario
+
+    res.json({ message: 'Producto y especificaciones actualizadas' });
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
 };
 
+// Eliminar un producto, sus especificaciones y su inventario
 export const deleteProducts = async (req, res) => {
   const { id } = req.params;
   try {
+    // Eliminar las especificaciones del producto
+    await pool.query('DELETE FROM Especificaciones WHERE ProductoID = ?', [id]);
+
+    // Eliminar el inventario del producto
+    await pool.query('DELETE FROM Inventario WHERE ProductoID = ?', [id]);
+
+    // Eliminar el producto
     const [result] = await pool.query('DELETE FROM Productos WHERE ProductoID = ?', [id]);
     if (result.affectedRows === 0) return res.status(404).json({ message: 'Producto no encontrado' });
-    res.json({ message: 'Producto eliminado' });
+
+    res.json({ message: 'Producto, especificaciones e inventario eliminados' });
   } catch (error) {
     res.status(500).json({ error: error.message });
   }

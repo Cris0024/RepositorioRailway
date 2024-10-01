@@ -1,5 +1,6 @@
 // console.log("hello multiverse")
 import express from "express";
+import cors from "cors";
 import IndexRoute from "./routes/index.routes.js";
 import CategoryRoutes from "./routes/categories.routes.js";
 import SupplierRoutes from "./routes/supplier.routes.js";
@@ -9,6 +10,8 @@ import DetailSale from "./routes/detailSale.routes.js";
 import SendingRoutes from "./routes/sending.routes.js";
 import UserRoutes from "./routes/user.routes.js";
 const app = express();
+
+app.use(cors());
 
 app.use(express.json());
 

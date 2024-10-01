@@ -21,16 +21,23 @@ export const getCategory = async (req, res) => {
 };
 
 export const createCategory = async (req, res) => {
-    const { Nombre } = req.body; // Nombre viene en el cuerpo de la solicitud
+    const { Nombre, Imagen } = req.body; // Se espera la ruta de la imagen en el cuerpo
+
     if (!Nombre) {
         return res.status(400).json({ message: 'El campo Nombre es requerido' });
     }
-    
+
+    // Validar si se proporciona la ruta de la imagen (opcional)
+    if (!Imagen) {
+        return res.status(400).json({ message: 'El campo Imagen es requerido' });
+    }
+
     try {
-        const [result] = await pool.query('INSERT INTO Categorias (Nombre) VALUES (?)', [Nombre]);
+        const [result] = await pool.query('INSERT INTO Categorias (Nombre, Imagen) VALUES (?, ?)', [Nombre, Imagen]);
         res.json({
             id: result.insertId,
-            Nombre
+            Nombre,
+            Imagen
         });
     } catch (error) {
         if (error.code === 'ER_DUP_ENTRY') {
@@ -42,9 +49,10 @@ export const createCategory = async (req, res) => {
 
 export const updateCategory = async (req, res) => {
     const { id } = req.params;
-    const { Nombre } = req.body;
+    const { Nombre, Imagen } = req.body; // También se espera la ruta de la imagen
+
     try {
-        const [result] = await pool.query('UPDATE Categorias SET Nombre = ? WHERE CategoriaID = ?', [Nombre, id]);
+        const [result] = await pool.query('UPDATE Categorias SET Nombre = ?, Imagen = ? WHERE CategoriaID = ?', [Nombre, Imagen, id]);
         if (result.affectedRows === 0) return res.status(404).json({ message: 'Categoría no encontrada' });
         res.json({ message: 'Categoría actualizada correctamente' });
     } catch (error) {

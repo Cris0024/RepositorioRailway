@@ -53,7 +53,7 @@ export const loginUser = async (req, res) => {
         // Buscar al usuario por correo o por nombre de usuario
         const [rows] = await pool.query(query, [param]);
         if (rows.length === 0) {
-            return res.status(400).json({ message: 'Correo/Usuario o contraseña incorrectos' });
+            return res.status(400).json({ message: 'Correo o Usuario incorrectos' });
         }
 
         const user = rows[0];
@@ -61,14 +61,20 @@ export const loginUser = async (req, res) => {
         // Verificar la contraseña
         const isMatch = await bcrypt.compare(Contraseña, user.Contraseña);
         if (!isMatch) {
-            return res.status(400).json({ message: 'Correo/Usuario o contraseña incorrectos' });
+            return res.status(400).json({ message: 'Contraseña incorrecta' });
         }
 
-        res.json({ message: 'Inicio de sesión exitoso' });
+        // Enviar el mensaje de éxito junto con el NivelUsuario
+        res.json({ 
+            message: 'Inicio de sesión exitoso',
+            NivelUsuario: user.NivelUsuario // Incluyendo el nivel de usuario
+        });
     } catch (error) {
+        console.error(error); // Para depuración
         res.status(500).json({ message: 'Error al iniciar sesión', error });
     }
 };
+    
 
 // Obtener todos los usuarios
 export const getUsers = async (req, res) => {
