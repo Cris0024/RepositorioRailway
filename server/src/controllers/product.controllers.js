@@ -103,6 +103,9 @@ export const getProductsActive = async (req, res) => {
       // Obtener proveedor
       const [supplier] = await pool.query('SELECT Nombre, Contacto, Teléfono, Dirección FROM Proveedores WHERE ProveedorID = ?', [product.ProveedorID]);
       product.Proveedor = supplier[0] || null; // Asegúrate de manejar el caso en que no exista
+
+      //obtener inventario
+      const [inventary] = await pool.query('SELECT CantidadComprada, CantidadVendida, CantidadDisponible from inventario WHERE ProductoID = ?', [product.ProductoID]);
     }
 
     res.json(products);

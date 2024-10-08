@@ -6,8 +6,6 @@ import CategoryRoutes from "./routes/categories.routes.js";
 import SupplierRoutes from "./routes/supplier.routes.js";
 import ProductRoutes from "./routes/product.routes.js";
 import SaleRoutes from "./routes/sale.routes.js";
-import DetailSale from "./routes/detailSale.routes.js";
-import SendingRoutes from "./routes/sending.routes.js";
 import UserRoutes from "./routes/user.routes.js";
 const app = express();
 
@@ -23,11 +21,7 @@ app.use(SupplierRoutes);
 
 app.use(ProductRoutes);
 
-app.use(DetailSale);
-
 app.use(SaleRoutes);
-
-app.use(SendingRoutes);
 
 app.use(UserRoutes);
 

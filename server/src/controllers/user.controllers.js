@@ -1,36 +1,38 @@
 import bcrypt from 'bcryptjs';
 import {pool} from '../db.js';
 
-// Registrar un usuario
 export const registerUser = async (req, res) => {
-    const { Nombre, CorreoElectronico, usuario, Contraseña, NivelUsuario } = req.body;
-
+    const { Nombre, CorreoElectronico, usuario, Contraseña, NivelUsuario, UsuarioIDGoogle } = req.body;
+  
     try {
-        // Verificar si el correo ya existe
-        const [emailRows] = await pool.query('SELECT * FROM Usuarios WHERE CorreoElectronico = ?', [CorreoElectronico]);
-        if (emailRows.length > 0) {
-            return res.status(400).json({ message: 'El correo electrónico ya está registrado' });
-        }
-
-        // Verificar si el nombre de usuario ya existe
-        const [userRows] = await pool.query('SELECT * FROM Usuarios WHERE usuario = ?', [usuario]);
-        if (userRows.length > 0) {
-            return res.status(400).json({ message: 'El nombre de usuario ya está registrado' });
-        }
-
-        // Encriptar la contraseña
-        const hashedPassword = await bcrypt.hash(Contraseña, 10);
-
-        // Insertar nuevo usuario en la base de datos
-        await pool.query('INSERT INTO Usuarios (Nombre, CorreoElectronico, usuario, Contraseña, NivelUsuario) VALUES (?, ?, ?, ?, ?)', 
-            [Nombre, CorreoElectronico, usuario, hashedPassword, NivelUsuario]);
-
-        res.status(201).json({ message: 'Usuario registrado correctamente' });
+      // Verificar si el correo ya existe
+      const [emailRows] = await pool.query('SELECT * FROM Usuarios WHERE CorreoElectronico = ?', [CorreoElectronico]);
+      if (emailRows.length > 0) {
+        return res.status(400).json({ message: 'El correo electrónico ya está registrado' });
+      }
+  
+      // Verificar si el nombre de usuario ya existe
+      const [userRows] = await pool.query('SELECT * FROM Usuarios WHERE usuario = ?', [usuario]);
+      if (userRows.length > 0) {
+        return res.status(400).json({ message: 'El nombre de usuario ya está registrado' });
+      }
+  
+      // Si la contraseña es null o vacía (para usuarios de Google), no encriptar
+      const hashedPassword = Contraseña ? await bcrypt.hash(Contraseña, 10) : null;
+  
+      // Insertar nuevo usuario en la base de datos
+      await pool.query(
+        'INSERT INTO Usuarios (Nombre, CorreoElectronico, usuario, Contraseña, NivelUsuario, UsuarioIDGoogle) VALUES (?, ?, ?, ?, ?, ?)', 
+        [Nombre, CorreoElectronico, usuario, hashedPassword, NivelUsuario, UsuarioIDGoogle]
+      );
+  
+      res.status(201).json({ message: 'Usuario registrado correctamente' });
     } catch (error) {
-        res.status(500).json({ message: 'Error al registrar el usuario', error });
+      console.error('Error en el registro:', error); // Añadir un log detallado del error en la consola del servidor
+      res.status(500).json({ message: 'Error al registrar el usuario', error: error.message }); // Enviar el mensaje exacto del error al frontend
     }
-};
-
+  };
+  
 // Iniciar sesión con correo electrónico o usuario
 export const loginUser = async (req, res) => {
     const { CorreoElectronico, usuario, Contraseña } = req.body;
@@ -74,7 +76,7 @@ export const loginUser = async (req, res) => {
         res.status(500).json({ message: 'Error al iniciar sesión', error });
     }
 };
-    
+  
 
 // Obtener todos los usuarios
 export const getUsers = async (req, res) => {
@@ -146,5 +148,20 @@ export const deleteUser = async (req, res) => {
         res.json({ message: 'Usuario eliminado correctamente' });
     } catch (error) {
         res.status(500).json({ message: 'Error al eliminar el usuario', error });
+    }
+};
+
+// Obtener un usuario por nombre de usuario
+export const getUserByUsername = async (req, res) => {
+    const { usuario } = req.params; // Capturar el nombre de usuario de los parámetros
+
+    try {
+        const [rows] = await pool.query('SELECT * FROM Usuarios WHERE usuario = ?', [usuario]);
+        if (rows.length === 0) {
+            return res.status(404).json({ message: 'Usuario no encontrado' });
+        }
+        res.json(rows[0]); // Devolver solo el primer usuario encontrado
+    } catch (error) {
+        res.status(500).json({ message: 'Error al obtener el usuario por nombre', error });
     }
 };
