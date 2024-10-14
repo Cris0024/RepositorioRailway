@@ -28,65 +28,31 @@ export const getProducts = async (req, res) => {
   }
 };
 
-// export const getProductsActive = async (req, res) => {
-//   try {
-//     const [products] = await pool.query(`
-//      SELECT 
-//         p.ProductoID, 
-//         p.Nombre AS Nombre, 
-//         p.Descripcion, 
-//         p.Precio, 
-//         p.Imagen,
-//         c.Nombre AS NombreCategoria, 
-//         pr.Nombre AS NombreProveedor,
-//         i.CantidadComprada,
-//         i.CantidadVendida,
-//         i.CantidadDisponible,
-//         i.FechaUltimaActualizacion
-//       FROM 
-//         Productos p
-//       LEFT JOIN 
-//         Categorias c ON p.CategoriaID = c.CategoriaID
-//       LEFT JOIN 
-//         Proveedores pr ON p.ProveedorID = pr.ProveedorID
-//       LEFT JOIN 
-//         Inventario i ON p.ProductoID = i.ProductoID
-//       WHERE 
-//         p.estadoEliminacion = 1
-//     `);
-    
-//     for (let product of products) {
-//       // Obtener especificaciones
-//       const [specs] = await pool.query('SELECT NombreEspecificacion, ValorEspecificacion FROM Especificaciones WHERE ProductoID = ?', [product.ProductoID]);
-//       product.Especificaciones = specs;
-
-//       // Obtener inventario
-//       const [inventory] = await pool.query('SELECT CantidadComprada, CantidadVendida, CantidadDisponible, FechaUltimaActualizacion FROM Inventario WHERE ProductoID = ?', [product.ProductoID]);
-//       product.Inventario = inventory.length > 0 ? inventory[0] : null;
-//     }
-
-//     res.json(products);
-//   } catch (error) {
-//     res.status(500).json({ error: error.message });
-//   }
-// };
-
-
-// Controlador para obtener los detalles completos de un producto
-
 export const getProductsActive = async (req, res) => {
   try {
     const [products] = await pool.query(`
-      SELECT 
+     SELECT 
         p.ProductoID, 
-        p.Nombre, 
+        p.Nombre AS Nombre, 
         p.Descripcion, 
         p.Precio, 
         p.Imagen,
+        c.Nombre AS NombreCategoria, 
+        pr.Nombre AS NombreProveedor,
+        i.CantidadComprada,
+        i.CantidadVendida,
+        i.CantidadDisponible,
+        i.FechaUltimaActualizacion,
         p.CategoriaID,
         p.ProveedorID
       FROM 
         Productos p
+      LEFT JOIN 
+        Categorias c ON p.CategoriaID = c.CategoriaID
+      LEFT JOIN 
+        Proveedores pr ON p.ProveedorID = pr.ProveedorID
+      LEFT JOIN 
+        Inventario i ON p.ProductoID = i.ProductoID
       WHERE 
         p.estadoEliminacion = 1
     `);
@@ -106,7 +72,7 @@ export const getProductsActive = async (req, res) => {
 
       //obtener inventario
       const [inventary] = await pool.query('SELECT CantidadComprada, CantidadVendida, CantidadDisponible from inventario WHERE ProductoID = ?', [product.ProductoID]);
-    }
+}
 
     res.json(products);
   } catch (error) {
@@ -408,6 +374,138 @@ export const restoreProducts = async (req, res) => {
     const [result] = await pool.query('UPDATE Productos SET estadoEliminacion = 1 WHERE ProductoID = ?', [id]);
     if (result.affectedRows === 0) return res.status(404).json({ message: 'Producto no encontrado' });
     res.json({ message: 'Producto marcado como eliminado' });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+};
+
+export const getSalesReport = async (req, res) => {
+  try {
+    // Producto más vendido
+    const [mostSoldProduct] = await pool.query(`
+      SELECT p.Nombre, i.CantidadVendida
+      FROM Productos p
+      JOIN Inventario i ON p.ProductoID = i.ProductoID
+      WHERE i.CantidadVendida = (
+        SELECT MAX(CantidadVendida)
+        FROM Inventario
+      )
+    `);
+
+    // Producto menos vendido
+    const [leastSoldProduct] = await pool.query(`
+      SELECT p.Nombre, i.CantidadVendida
+      FROM Productos p
+      JOIN Inventario i ON p.ProductoID = i.ProductoID
+      WHERE i.CantidadVendida = (
+        SELECT MIN(CantidadVendida)
+        FROM Inventario
+        WHERE CantidadVendida > 0
+      )
+    `);
+
+    // Categoría más vendida
+    const [mostSoldCategory] = await pool.query(`
+      SELECT c.Nombre, SUM(i.CantidadVendida) AS TotalVendida
+      FROM Categorias c
+      JOIN Productos p ON c.CategoriaID = p.CategoriaID
+      JOIN Inventario i ON p.ProductoID = i.ProductoID
+      GROUP BY c.Nombre
+      HAVING TotalVendida = (
+        SELECT MAX(TotalVendida)
+        FROM (
+          SELECT SUM(i.CantidadVendida) AS TotalVendida
+          FROM Categorias c
+          JOIN Productos p ON c.CategoriaID = p.CategoriaID
+          JOIN Inventario i ON p.ProductoID = i.ProductoID
+          GROUP BY c.Nombre
+        ) AS CategoryTotals
+      )
+    `);
+
+    // Categoría menos vendida
+    const [leastSoldCategory] = await pool.query(`
+      SELECT c.Nombre, SUM(i.CantidadVendida) AS TotalVendida
+      FROM Categorias c
+      JOIN Productos p ON c.CategoriaID = p.CategoriaID
+      JOIN Inventario i ON p.ProductoID = i.ProductoID
+      GROUP BY c.Nombre
+      HAVING TotalVendida = (
+        SELECT MIN(TotalVendida)
+        FROM (
+          SELECT SUM(i.CantidadVendida) AS TotalVendida
+          FROM Categorias c
+          JOIN Productos p ON c.CategoriaID = p.CategoriaID
+          JOIN Inventario i ON p.ProductoID = i.ProductoID
+          GROUP BY c.Nombre
+        ) AS CategoryTotals
+      )
+    `);
+
+    // Informe de inventario
+    const [inventoryReport] = await pool.query(`
+      SELECT p.Nombre, c.Nombre AS Categoria, pr.Nombre AS Proveedor, p.Precio, i.CantidadDisponible, i.FechaUltimaActualizacion
+      FROM Productos p
+      JOIN Categorias c ON p.CategoriaID = c.CategoriaID
+      JOIN Proveedores pr ON p.ProveedorID = pr.ProveedorID
+      JOIN Inventario i ON p.ProductoID = i.ProductoID
+    `);
+
+    res.json({
+      mostSoldProduct: mostSoldProduct.length > 0 ? mostSoldProduct[0] : null,
+      leastSoldProduct: leastSoldProduct.length > 0 ? leastSoldProduct[0] : null,
+      mostSoldCategory: mostSoldCategory.length > 0 ? mostSoldCategory[0] : null,
+      leastSoldCategory: leastSoldCategory.length > 0 ? leastSoldCategory[0] : null,
+      inventoryReport: inventoryReport.length > 0 ? inventoryReport : []
+    });
+  } catch (error) {
+    res.status(500).json({ error: `Error al obtener el informe de ventas: ${error.message}` });
+  }
+};
+
+// Obtener el inventario de un producto según el ProductoID
+export const getProductInventory = async (req, res) => {
+  const { id } = req.params; // Obtener el ProductID de los parámetros de la URL
+
+  try {
+    // Consulta para obtener el inventario del producto
+    const [inventory] = await pool.query(`
+      SELECT CantidadComprada, CantidadVendida, CantidadDisponible, FechaUltimaActualizacion
+      FROM Inventario
+      WHERE ProductoID = ?
+    `, [id]);
+
+    // Verificar si el producto tiene inventario registrado
+    if (inventory.length === 0) {
+      return res.status(404).json({ message: 'Inventario no encontrado para este producto' });
+    }
+
+    // Respuesta con los datos del inventario
+    res.json(inventory[0]);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+};
+
+// Actualizar la cantidad vendida de un producto
+export const updateQuantitySold = async (req, res) => {
+  const { id } = req.params; // Obtener el ProductID de los parámetros de la URL
+  const { cantidadVendida } = req.body; // Obtener la nueva cantidad vendida del cuerpo de la solicitud
+  
+  // Validar que cantidadVendida es un número positivo
+  if (typeof cantidadVendida !== 'number' || cantidadVendida < 0) {
+    return res.status(400).json({ message: 'CantidadVendida debe ser un número positivo' });
+  }
+
+  try {
+    // Actualizar la cantidad vendida en la tabla Inventario
+    const [result] = await pool.query('UPDATE Inventario SET CantidadVendida = CantidadVendida + ? WHERE ProductoID = ?', [cantidadVendida, id]);
+    
+    if (result.affectedRows === 0) {
+      return res.status(404).json({ message: 'Producto no encontrado' });
+    }
+
+    res.json({ message: 'Cantidad vendida actualizada correctamente' });
   } catch (error) {
     res.status(500).json({ error: error.message });
   }

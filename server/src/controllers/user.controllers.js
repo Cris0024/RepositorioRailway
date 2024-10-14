@@ -106,7 +106,7 @@ export const getUserById = async (req, res) => {
 // Actualizar un usuario
 export const updateUser = async (req, res) => {
     const { id } = req.params;
-    const { Nombre, CorreoElectronico, usuario, Contraseña, NivelUsuario } = req.body;
+    const { Nombre, CorreoElectronico, usuario} = req.body;
 
     try {
         // Verificar si el usuario existe
@@ -116,14 +116,14 @@ export const updateUser = async (req, res) => {
         }
 
         // Si se proporciona una nueva contraseña, encriptarla
-        let hashedPassword = rows[0].Contraseña;
-        if (Contraseña) {
-            hashedPassword = await bcrypt.hash(Contraseña, 10);
-        }
+        //let hashedPassword = rows[0].Contraseña;
+        //if (Contraseña) {
+        //    hashedPassword = await bcrypt.hash(Contraseña, 10);
+        //}
 
         // Actualizar el usuario
-        await pool.query('UPDATE Usuarios SET Nombre = ?, CorreoElectronico = ?, usuario = ?, Contraseña = ?, NivelUsuario = ? WHERE UsuarioID = ?', 
-            [Nombre, CorreoElectronico, usuario, hashedPassword, NivelUsuario, id]);
+        await pool.query('UPDATE Usuarios SET Nombre = ?, CorreoElectronico = ?, usuario = ? WHERE UsuarioID = ?', 
+            [Nombre, CorreoElectronico, usuario, id]);
 
         res.json({ message: 'Usuario actualizado correctamente' });
     } catch (error) {
@@ -163,5 +163,42 @@ export const getUserByUsername = async (req, res) => {
         res.json(rows[0]); // Devolver solo el primer usuario encontrado
     } catch (error) {
         res.status(500).json({ message: 'Error al obtener el usuario por nombre', error });
+    }
+};
+
+// Controlador para cambiar la contraseña
+export const changeUserPassword = async (req, res) => {
+    const { id } = req.params;
+    const { contrasenaActual, nuevaContrasena, repetirContrasena } = req.body;
+
+    try {
+        // Verificar si el usuario existe
+        const [rows] = await pool.query('SELECT * FROM Usuarios WHERE UsuarioID = ?', [id]);
+        if (rows.length === 0) {
+            return res.status(404).json({ message: 'Usuario no encontrado' });
+        }
+
+        const user = rows[0];
+
+        // Verificar si la contraseña actual coincide
+        const isMatch = await bcrypt.compare(contrasenaActual, user.Contraseña);
+        if (!isMatch) {
+            return res.status(400).json({ message: 'La contraseña actual es incorrecta' });
+        }
+
+        // Verificar si la nueva contraseña y repetir contraseña coinciden
+        if (nuevaContrasena !== repetirContrasena) {
+            return res.status(400).json({ message: 'Las nuevas contraseñas no coinciden' });
+        }
+
+        // Encriptar la nueva contraseña
+        const hashedPassword = await bcrypt.hash(nuevaContrasena, 10);
+
+        // Actualizar la contraseña en la base de datos
+        await pool.query('UPDATE Usuarios SET Contraseña = ? WHERE UsuarioID = ?', [hashedPassword, id]);
+
+        res.json({ message: 'Contraseña actualizada correctamente' });
+    } catch (error) {
+        res.status(500).json({ message: 'Error al actualizar la contraseña', error });
     }
 };
